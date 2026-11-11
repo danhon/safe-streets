@@ -137,3 +137,15 @@ def test_a_fresh_clone_builds_from_the_release_asset():
     m = re.search(r'^ARG DETECTOR_URL="?([^"\n]*)"?$', d, re.M)
     assert m and m[1].startswith("https://github.com/") and "/releases/download/" in m[1]
     assert m[1].endswith("/rtmdet-tiny.tar.gz")
+
+
+def test_every_yaml_file_parses():
+    """GitHub runs no job at all from a workflow it can't read (an unquoted
+    ': ' in a step's name did that)."""
+    files = sorted(p for p in ROOT.rglob("*.y*ml") if ".venv" not in p.parts and p.suffix in (".yml", ".yaml"))
+    assert ROOT / ".github" / "workflows" / "test.yml" in files
+    class Loader(yaml.SafeLoader):  # Compose's own tags (!reset, !override) are valid
+        pass
+    Loader.add_multi_constructor("!", lambda loader, tag, node: None)
+    for p in files:
+        yaml.load(p.read_text(), Loader=Loader)

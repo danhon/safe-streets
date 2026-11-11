@@ -10,5 +10,5 @@ jobs:
       - run: uv sync --locked
       - name: Licences (no GPL or AGPL, no ultralytics)
         run: uv run python scripts/check_licences.py
-      - name: Tests (no models: the real-model tests are opt-in)
+      - name: "Tests (no models: the real-model tests are opt-in)"
         run: uv run pytest -q
