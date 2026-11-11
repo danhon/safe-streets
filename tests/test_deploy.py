@@ -149,3 +149,8 @@ def test_every_yaml_file_parses():
     Loader.add_multi_constructor("!", lambda loader, tag, node: None)
     for p in files:
         yaml.load(p.read_text(), Loader=Loader)
+
+
+def test_ci_installs_ffmpeg():
+    """The folder source's tests need ffmpeg; GitHub's runner hasn't got it."""
+    assert "install -y -q ffmpeg" in (ROOT / ".github" / "workflows" / "test.yml").read_text()
