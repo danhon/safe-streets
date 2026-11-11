@@ -269,7 +269,7 @@ if (PELICAN) {
 }
 
 // ruler
-const maxC = Math.max(...counts);
+const maxC = Math.max(1, ...counts);  // 1: an empty day's bars stay flat, not NaN
 document.getElementById("bars").innerHTML = ZOO.map((z, i) =>
   `<div class="bar ${z.max > LIMIT ? "over" : ""}" data-i="${i}" title="${z.n}: ${z.quip}"><div class="c">${counts[i]}</div><div class="col" style="height:${Math.max(3, 100 * counts[i] / maxC) * .78}%"></div></div>`).join("");
 document.querySelectorAll(".bar .c").forEach((el, i) => { const n = counts[i], t0 = performance.now(); el.textContent = 0;
@@ -279,18 +279,21 @@ document.getElementById("names").insertAdjacentHTML("beforeend", ZOO.map(z => `<
 // quip + awards
 const best = ZOO[counts.indexOf(maxC)];
 const legal = counts[0] + counts[1] + counts[2];
-document.getElementById("quip").innerHTML =
-  `That day the street was mostly <b>${best.n}</b> ${best.e} (${best.quip}). ` +
+document.getElementById("quip").innerHTML = !P.length
+  ? (STATS.n ? `${STATS.n} animal${STATS.n === 1 ? "" : "s"} passed, too few at a time to show which.` : "No animals that day. Not even a snail.")
+  : `That day the street was mostly <b>${best.n}</b> ${best.e} (${best.quip}). ` +
   `${legal} animals kept to duck speed or slower; <b>${counts.slice(3).reduce((x, y) => x + y, 0)}</b> did not. ` +
   `${counts[6] ? `<b>${counts[6]}</b> rocket${counts[6] === 1 ? "" : "s"} 🚀 left the atmosphere.` : "No rockets that day. Small mercies."}`;
 const hrs = STATS.hours.filter(h => h.n);
-const wild = hrs.filter(h => h.n >= 5).reduce((a, b) => (b.over / b.n > a.over / a.n ? b : a));
-const calm = hrs.filter(h => h.n >= 5).reduce((a, b) => (b.over / b.n < a.over / a.n ? b : a));
+// An award needs passes to give it to: none on an empty day.
+const big = hrs.filter(h => h.n >= 5);
+const wild = big.length ? big.reduce((a, b) => (b.over / b.n > a.over / a.n ? b : a)) : null;
+const calm = big.length ? big.reduce((a, b) => (b.over / b.n < a.over / a.n ? b : a)) : null;
 document.getElementById("awards").innerHTML = [
-  [A(STATS.fastest).e, PELICAN ? "Fastest rider" : "Fastest beast", `about ${STATS.fastest.mph} ${UNIT}, ${quarterRange(STATS.fastest.q)}`],
-  [PELICAN ? "🏁" : "🦓", "Wildest hour", `${hourLabel(wild.h)}: ${wild.over} of ${wild.n} over`],
-  [PELICAN ? ZOO[2].e : "🦆", PELICAN ? "Calmest ride" : "Duck pond hour", `${hourLabel(calm.h)}: calmest, ${calm.n - calm.over} of ${calm.n} legal`],
-].map(([e, b, s]) => `<div class="aw"><div class="e">${e}</div><b>${b}</b><span>${s}</span></div>`).join("");
+  STATS.fastest && [A(STATS.fastest).e, PELICAN ? "Fastest rider" : "Fastest beast", `about ${STATS.fastest.mph} ${UNIT}, ${quarterRange(STATS.fastest.q)}`],
+  wild && [PELICAN ? "🏁" : "🦓", "Wildest hour", `${hourLabel(wild.h)}: ${wild.over} of ${wild.n} over`],
+  calm && [PELICAN ? ZOO[2].e : "🦆", PELICAN ? "Calmest ride" : "Duck pond hour", `${hourLabel(calm.h)}: calmest, ${calm.n - calm.over} of ${calm.n} legal`],
+].filter(Boolean).map(([e, b, s]) => `<div class="aw"><div class="e">${e}</div><b>${b}</b><span>${s}</span></div>`).join("");
 
 // hours, tinted by share over
 document.getElementById("hours").innerHTML = hrs.map(h => {
