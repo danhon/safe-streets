@@ -11,7 +11,7 @@ basetrack.py) and ported to numpy alone:
   tracker instead of globally. Replayed over 11,462 frames of real
   detections it matches the tracker speedcam ran frame for frame, and
   every stored speed bit for bit (2026-11-10);
-- the thresholds are the ones safe_streets used through its earlier tracker:
+- the thresholds are the ones speedcam (the reference install) ran with:
   high 0.25, low 0.1, new track 0.25, buffer 30 frames, match 0.8, with the
   score fused into the first association.
 
