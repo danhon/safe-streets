@@ -77,7 +77,7 @@ async def test_three_segments_one_batch_one_pass(tmp_path, settings, db):
     times = uneven_times(36 * 12, 12, 0.25, seed=7, start=1000.0)
     whole = tmp_path / "whole.mp4"
     scene = render_clip(whole, speed_mps=MPH20, frame_times=times, gop=1)
-    for path, first in _segments(whole, tmp_path / "cut", [1012, 1024]):
+    for path, first in _segments(whole, tmp_path / "cut", [1012, 1024], times):
         dest = d / (T + timedelta(seconds=first - times[0])).strftime("%Y%m%d-%H%M%S.mp4")
         path.rename(dest)
         old = time.time() - 600
@@ -96,14 +96,19 @@ async def test_three_segments_one_batch_one_pass(tmp_path, settings, db):
     assert rows[0]["mph"] == pytest.approx(20.0, abs=0.5)
 
 
-def _segments(whole, out, at):
-    """Cut `whole` at these pts (seconds) with ffmpeg's segment muxer, keeping
-    its pts. Returns (path, first pts) for each segment, in order."""
+def _segments(whole, out, at, times):
+    """Cut `whole` (frames at `times`) at these pts (seconds) with ffmpeg's
+    segment muxer, keeping its pts. Returns (path, first pts) for each
+    segment, in order. It cuts at frame numbers: -segment_times reads
+    absolute pts in ffmpeg 4.4 but time from the start in 6.1."""
+    import bisect
     import subprocess
     out.mkdir()
+    frames = [bisect.bisect_left(times, t) for t in at]
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-copyts", "-i", str(whole), "-c", "copy", "-f", "segment",
-                    "-segment_times", ",".join(map(str, at)), "-reset_timestamps", "0", str(out / "s%d.mp4")],
+                    "-segment_frames", ",".join(map(str, frames)), "-reset_timestamps", "0", str(out / "s%d.mp4")],
                    check=True)
+    assert len(list(out.iterdir())) == len(at) + 1, "ffmpeg didn't cut where asked"
     res = []
     for p in sorted(out.iterdir()):
         first = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
@@ -122,7 +127,7 @@ async def test_a_car_still_crossing_at_the_recordings_end_waits(tmp_path, settin
     times = uneven_times(36 * 12, 12, 0.25, seed=7, start=1000.0)
     whole = tmp_path / "whole.mp4"
     scene = render_clip(whole, speed_mps=MPH20, frame_times=times, gop=1)
-    for path, first in _segments(whole, tmp_path / "cut", [1009, 1018])[:2]:
+    for path, first in _segments(whole, tmp_path / "cut", [1009, 1018], times)[:2]:
         dest = d / (T + timedelta(seconds=first - times[0])).strftime("%Y%m%d-%H%M%S.mp4")
         path.rename(dest)
         old = time.time() - 600
