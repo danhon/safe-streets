@@ -119,6 +119,8 @@ class Settings:
     # Hooks (hooks.py): comma-separated module:attr entry points, each called
     # after a batch with its new passes.
     hooks: str = field(default_factory=lambda: _env("HOOKS", ""))
+    # Each hook's batch_done gets this long, then it's cancelled and logged.
+    hook_timeout_seconds: float = field(default_factory=lambda: _env("HOOK_TIMEOUT_SECONDS", 60.0))
 
     # The public views (public_view.py): nothing newer than PUBLIC_DELAY_HOURS,
     # times floored to PUBLIC_TIME_BUCKET_MIN, and a bucket of fewer than

@@ -251,7 +251,7 @@ class Batcher:
             if self.hooks and fresh:
                 from .hooks import PassRecord, run_hooks
                 rows = [r for eid in fresh for r in await self.db.passes_for_event(eid)]
-                await run_hooks(self.hooks, [PassRecord.from_row(r) for r in rows])
+                await run_hooks(self.hooks, [PassRecord.from_row(r) for r in rows], self.s.hook_timeout_seconds)
             await self.prune_clips()
             caught = {}
             queued = (await self.db.event_counts()).get("queued", 0)

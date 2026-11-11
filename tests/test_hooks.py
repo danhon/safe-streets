@@ -2,11 +2,14 @@
 the detector behind the Detector protocol (RTMDet-tiny by default, through
 the vendored MIT ByteTrack; ultralytics is never imported)."""
 
+import asyncio
+import dataclasses
 import json
 import logging
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -105,6 +108,29 @@ async def test_a_raising_hook_is_logged_and_the_next_still_runs(db, settings, mo
     assert summary.get("error") is None and summary["cars"] == 3
     assert len(CALLS) == 1
     assert "hook" in caplog.text and "RuntimeError" in caplog.text
+
+
+class Hanging:
+    async def batch_done(self, passes):
+        await asyncio.sleep(3600)  # a webhook that never answers
+
+
+async def test_a_hanging_hook_is_cut_off_and_the_batch_carries_on(db, settings, monkeypatch, caplog):
+    await calibrate(db)
+    caplog.set_level(logging.ERROR)
+    s = dataclasses.replace(settings, hook_timeout_seconds=0.2)
+    t0 = time.monotonic()
+    summary, _ = await asyncio.wait_for(run_batch(db, s, [Hanging(), Recording()], monkeypatch), 30)
+    assert time.monotonic() - t0 < 10
+    assert summary.get("error") is None and summary["cars"] == 3
+    assert len(CALLS) == 1  # the next hook still ran
+    assert "Hanging" in caplog.text and "0.2" in caplog.text
+
+
+def test_hooks_get_60_s_by_default(monkeypatch):
+    from safe_streets.config import Settings
+    monkeypatch.delenv("HOOK_TIMEOUT_SECONDS", raising=False)
+    assert Settings().hook_timeout_seconds == 60.0
 
 
 async def test_no_hook_runs_for_a_batch_without_new_passes(db, settings, monkeypatch):
