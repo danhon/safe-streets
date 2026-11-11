@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>{{ title }}</title>
+<style>
+:root { --bg:#faf9f6; --ink:#1b1b1b; --soft:#6d6a64; --line:#dedad2; --under:#3a6fb0; --over:#c0392b; --card:#fff; }
+@media (prefers-color-scheme: dark) { :root { --bg:#111214; --ink:#ecebe7; --soft:#9a978f; --line:#2c2d31; --under:#6d9fe0; --over:#ef6b5c; --card:#1a1b1e; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 1.6rem; margin: 0 0 .2rem; }
+nav.day { display:flex; gap:12px; align-items:center; color:var(--soft); margin-bottom: 1rem; flex-wrap: wrap; }
+nav.day a { color: inherit; }
+.tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 1rem 0; }
+.tile { background:var(--card); border:1px solid var(--line); border-radius:12px; padding: 12px 14px; }
+.tile b { display:block; font-size: 1.8rem; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--soft); font-size: .85rem; }
+h2 { font-size: 1.05rem; margin: 1.6rem 0 .4rem; }
+svg { width: 100%; height: auto; display:block; }
+svg text { fill: var(--soft); font-size: 6.5px; }
+.under { fill: var(--under); } .over { fill: var(--over); } .few { fill: var(--line); }
+.limit { stroke: var(--over); stroke-dasharray: 3 3; }
+.grid { stroke: var(--line); }
+.note { color: var(--soft); font-size: .85rem; }
+.views a { margin-right: 1rem; }
+</style></head><body><main>
+<h1>{{ title }}</h1>
+<nav class="day">
+  {% if prev %}<a href="/?day={{ prev }}" rel="nofollow">‹ {{ prev_label }}</a>{% endif %}
+  <strong>{{ day_label }}</strong>
+  {% if next %}<a href="/?day={{ next }}" rel="nofollow">{{ next_label }} ›</a>{% endif %}
+</nav>
+{% if d.published_until %}<p class="note">Published up to {{ until_label }}: the rest of the day appears {{ delay_label }} after it happens.</p>{% endif %}
+
+<div class="tiles">
+  <div class="tile"><b>{{ d.total }}</b><span>vehicles</span></div>
+  <div class="tile"><b>{{ d.over }}</b><span>over {{ limit_label }} {{ d.unit }}</span></div>
+  <div class="tile"><b>{{ over_pct }}</b><span>of listed vehicles over the limit</span></div>
+  <div class="tile"><b>{{ fastest if fastest is not none else "–" }}</b><span>fastest, {{ d.unit }} (rounded)</span></div>
+</div>
+
+<h2>Vehicles by hour</h2>
+{% if d.total %}
+<svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" role="img" aria-label="{{ chart.label }}">
+  {% for g in chart.grid %}<line class="grid" x1="{{ chart.left }}" x2="{{ chart.w }}" y1="{{ g.y }}" y2="{{ g.y }}"/><text x="{{ chart.left - 3 }}" y="{{ g.y + 3 }}" text-anchor="end">{{ g.v }}</text>{% endfor %}
+  {% for c in chart.cols %}<g><title>{{ c.title }}</title>
+    {% if c.few %}<rect class="few" x="{{ c.x }}" width="{{ c.w }}" y="{{ c.y }}" height="{{ c.h }}" rx="2"/>
+    {% else %}<rect class="under" x="{{ c.x }}" width="{{ c.w }}" y="{{ c.y }}" height="{{ c.h }}" rx="2"/>
+    {% if c.over_h %}<rect class="over" x="{{ c.x }}" width="{{ c.w }}" y="{{ c.y }}" height="{{ c.over_h }}" rx="2"/>{% endif %}{% endif %}</g>{% endfor %}
+  {% for t in chart.ticks %}<text x="{{ t.x }}" y="{{ chart.h - 2 }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+</svg>
+<p class="note">Red: over the limit. Grey: an hour of fewer than {{ k }} vehicles, shown only as a count.</p>
+
+<h2>Fastest each hour</h2>
+<svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" role="img" aria-label="{{ fast.label }}">
+  {% for g in fast.grid %}<line class="grid" x1="{{ chart.left }}" x2="{{ chart.w }}" y1="{{ g.y }}" y2="{{ g.y }}"/><text x="{{ chart.left - 3 }}" y="{{ g.y + 3 }}" text-anchor="end">{{ g.v }}</text>{% endfor %}
+  <line class="limit" x1="{{ chart.left }}" x2="{{ chart.w }}" y1="{{ fast.limit_y }}" y2="{{ fast.limit_y }}"/>
+  {% for c in fast.cols %}<g><title>{{ c.title }}</title><rect class="{{ 'over' if c.over else 'under' }}" x="{{ c.x }}" width="{{ c.w }}" y="{{ c.y }}" height="{{ c.h }}" rx="2"/></g>{% endfor %}
+  {% for t in chart.ticks %}<text x="{{ t.x }}" y="{{ chart.h - 2 }}" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+</svg>
+<p class="note">Dashed: the limit, {{ limit_label }} {{ d.unit }}.</p>
+{% else %}
+<p>Nothing published for this day.</p>
+{% endif %}
+
+<h2>Other ways to see the day</h2>
+<p class="views"><a href="/zoo?day={{ d.day }}">The street zoo</a><a href="/dial?day={{ d.day }}">The day dial</a><a href="/day.json?day={{ d.day }}">The data (JSON)</a></p>
+<p class="note">What's shown here: each vehicle's speed rounded, its time to the {{ d.bucket_min }} minutes, published {{ delay_label }} later. A {{ d.bucket_min }}-minute window with fewer than {{ k }} vehicles counts in the totals but isn't listed. No pictures, number plates, makes or colours. Speeds are estimates from a camera.</p>
+</main></body></html>

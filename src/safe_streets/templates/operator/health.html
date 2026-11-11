@@ -1,0 +1,5 @@
+{% extends "operator/base.html" %}{% block title %}Health{% endblock %}{% block main %}
+<h1>Health</h1>
+<div class="card"><p>Calibration: {{ h.calibration }}</p><p>Source: {{ h.source or "none" }}</p>
+{% if h.batch %}<p>Last batch finished {{ h.batch.age_s }} s ago.</p><pre style="white-space:pre-wrap;font-size:.8rem">{{ h.batch.last | tojson(indent=1) }}</pre>{% else %}<p>No batcher running.</p>{% endif %}</div>
+{% endblock %}

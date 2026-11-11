@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>{% block title %}{{ title or "Operator" }}{% endblock %} · safe-streets</title>
+<style>
+:root { --bg:#fbfaf7; --ink:#1c1c1c; --soft:#6a675f; --line:#e2ded5; --card:#fff; --accent:#1f5fae; --bad:#b3261e; --good:#1e7a3c; }
+@media (prefers-color-scheme: dark) { :root { --bg:#121315; --ink:#eceae5; --soft:#9b988f; --line:#2d2e33; --card:#1a1b1f; --accent:#7fb0ef; --bad:#f08a80; --good:#79c992; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, sans-serif; }
+header { display:flex; flex-wrap:wrap; gap:.4rem 1rem; align-items:center; padding:.6rem 16px; border-bottom:1px solid var(--line); }
+header a { color: var(--ink); text-decoration: none; } header a:hover { text-decoration: underline; }
+header .brand { font-weight: 700; margin-right: .5rem; }
+header form { margin-left: auto; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.3rem; margin: .2rem 0 .8rem; }
+a { color: var(--accent); }
+button, input, select { font: inherit; }
+button { padding: .35rem .8rem; border-radius: 6px; border: 1px solid var(--soft); background: var(--card); color: var(--ink); cursor: pointer; }
+button.on, button.primary { background: var(--ink); color: var(--bg); }
+input[type=password], input[type=text], input[type=number] { padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--ink); }
+table { border-collapse: collapse; width: 100%; } th, td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { color: var(--soft); font-weight: 600; font-size: .85rem; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.soft { color: var(--soft); } .bad { color: var(--bad); } .good { color: var(--good); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0 0 1rem; }
+.scroll { overflow-x: auto; }
+</style>{% block head %}{% endblock %}</head><body>
+{% if s %}<header><span class="brand">safe-streets</span><a href="/operator/">Passes</a><a href="/operator/calibrate">Calibration</a>
+<a href="/operator/logs">Log</a><a href="/operator/health">Health</a><a href="/operator/settings">Settings</a><a href="/">Public page</a>
+<form method="post" action="/operator/logout"><input type="hidden" name="csrf" value="{{ s.csrf }}"><button>Sign out</button></form></header>{% endif %}
+<main>{% block main %}{% endblock %}</main></body></html>

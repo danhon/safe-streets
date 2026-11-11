@@ -1,0 +1,8 @@
+{% extends "operator/base.html" %}{% block title %}Log{% endblock %}{% block main %}
+<h1>Log</h1>
+{% if where %}<form method="get"><input type="text" name="q" value="{{ q }}" placeholder="Filter"> <button>Filter</button></form>
+<p class="soft">The last {{ n }} matching lines of {{ where }}, newest at the bottom.</p>
+<pre style="white-space:pre-wrap;font-size:.8rem">{% for ln in lines %}{{ ln }}
+{% endfor %}</pre>
+{% else %}<p>Set LOG_DIR to keep the log in a file this page can read; without it the log goes to the container's output only (<code>docker compose logs</code>).</p>{% endif %}
+{% endblock %}

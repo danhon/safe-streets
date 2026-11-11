@@ -1,0 +1,49 @@
+[project]
+name = "safe-streets"
+version = "0.1.0"
+description = "Estimate the speed of passing vehicles from a fixed camera's recordings"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "argon2-cffi>=23.1",
+    "av>=19.0.2",
+    "fastapi>=0.161.1",
+    "httpx>=0.28",
+    "itsdangerous>=2.2",
+    "jinja2>=3.1.6",
+    "lap>=0.5.13",
+    "numpy>=2.0",
+    "opencv-python-headless>=5.0.0.93",
+    "openvino>=2026.4.1",
+    "python-dotenv>=1.2.4",
+    "python-multipart>=0.0.20",
+    "tzdata>=2026.5",
+    "uiprotect>=23.9.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+safe-streets = "safe_streets.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+include = ["src/safe_streets/**/*.py", "src/safe_streets/**/*.sql", "src/safe_streets/**/*.html",
+           "src/safe_streets/**/*.css", "src/safe_streets/**/*.js"]
+sources = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.0",
+    "pip-licenses>=5.0",
+]

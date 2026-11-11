@@ -1,0 +1,14 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install 3.12
+      - run: uv sync --locked
+      - name: Licences (no GPL or AGPL, no ultralytics)
+        run: uv run python scripts/check_licences.py
+      - name: Tests (no models: the real-model tests are opt-in)
+        run: uv run pytest -q

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>The Day Dial</title>
+<style>
+:root { --bg:#f2efe9; --ink:#191919; --soft:#86827a; --ring:#d6d1c7; --hand:#191919; }
+@media (prefers-color-scheme: dark) { :root { --bg:#09090c; --ink:#eeeae4; --soft:#7a776f; --ring:#25252b; --hand:#f4f1ea; } }
+* { box-sizing: border-box; }
+body { margin:0; background: radial-gradient(ellipse at 50% 38%, color-mix(in srgb, var(--bg) 88%, #7a5cff) 0%, var(--bg) 62%); background-color: var(--bg); color:var(--ink); font: 15px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif; min-height: 100vh; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 60px; }
+.label { text-transform: uppercase; letter-spacing: .18em; font-size: .72rem; color: var(--soft); }
+h1 { font-weight: 300; font-size: clamp(1.8rem, 6vw, 2.6rem); margin: .3rem 0 .4rem; letter-spacing: -.01em; }
+svg#dial { width: 100%; height: auto; display:block; touch-action: manipulation; }
+#dial line.v { stroke-linecap: round; transition: opacity .25s; }
+#dial.focus line.v:not(.hi) { opacity: .08 !important; }
+#dial .hi { stroke-width: 3.2 !important; }
+.pulse { transform-box: fill-box; transform-origin: center; pointer-events: none; }
+.controls { display:flex; gap: 12px; align-items: center; margin: 4px 0 0; }
+button { font: inherit; font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; background: none; color: var(--ink); border: 1px solid var(--ring); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+input[type=range] { flex: 1; accent-color: var(--ink); }
+.ramp { height: 6px; border-radius: 3px; margin: 1.4rem 0 .3rem; }
+.ends { display:flex; justify-content: space-between; color: var(--soft); font-size: .78rem; }
+.plaque { display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px; border-top: 1px solid var(--ring); padding-top: 16px; margin-top: 16px; }
+.plaque b { display:block; font-weight: 300; font-size: 1.8rem; font-variant-numeric: tabular-nums; }
+.desc { color: var(--soft); margin-top: 1.5rem; max-width: 36em; }
+</style></head><body><main>
+<div class="label" id="lbl"></div>
+<h1>The Day Dial</h1>
+<svg id="dial" viewBox="-345 -345 690 690" role="img" aria-label="A living 24-hour dial: each line is one vehicle, longer and hotter when faster">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4"/></filter>
+    <radialGradient id="core"><stop offset="0" stop-color="var(--ink)" stop-opacity=".10"/><stop offset="1" stop-color="var(--ink)" stop-opacity="0"/></radialGradient>
+  </defs>
+  <g id="static"></g>
+  <g id="glowtips" filter="url(#glow)"></g>
+  <g id="lines"></g>
+  <g id="tips"></g>
+  <g id="pulses"></g>
+  <g id="handg"></g>
+  <circle id="heart" r="62" fill="url(#core)"/>
+  <text id="clock" y="-4" text-anchor="middle" font-size="26" font-weight="300" fill="var(--ink)"></text>
+  <text id="count" y="20" text-anchor="middle" font-size="11" letter-spacing="1.5" fill="var(--soft)"></text>
+</svg>
+<div class="controls" id="toggle" style="margin-bottom:6px;flex-wrap:wrap"></div>
+<div class="controls"><button id="play">Replay</button><input id="scrub" type="range" min="0" max="96" step="1" value="0" aria-label="Scrub through the day"></div>
+<div class="ramp" id="ramp"></div>
+<div class="ends"><span>slow</span><span id="limitring"></span><span>fast</span></div>
+<div class="plaque" id="plaque"></div>
+<p class="desc">A 24-hour clock, midnight at the top. The hand sweeps the day; each vehicle grows out as a line when the hand reaches its time, its length and heat its speed, and every speeder sends out a pulse as it crosses the dashed ring, the limit. The outer arc thickens with each hour's traffic. Afterwards the day keeps breathing, replaying a car now and then. Hover or tap a line to read it; drag the slider to scrub.</p>
+</main>
+<!--COMMON-->
+<script>
+const R0 = 70, K = 5.0, RMAX = R0 + 46 * K;
+const NS = "http://www.w3.org/2000/svg";
+const $ = id => document.getElementById(id);
+const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
+function heat(v) { const mph = v * TO_MPH, t = Math.max(0, Math.min(1, (mph - 5) / 35)); return `hsl(${190 - 190 * t}, 78%, ${48 + 8 * Math.sin(t * Math.PI)}%)`; }
+const ang = f => f * Math.PI * 2 - Math.PI / 2;  // fraction of the day -> angle
+
+// static furniture: inner ring, limit ring, hour ticks and labels, the traffic arc
+$("limitring").textContent = `${LIMIT} ${UNIT} (dashed ring)`;
+const S = $("static");
+function drawStatic() {
+  S.innerHTML = "";
+  mk("circle", {r: R0, fill: "none", stroke: "var(--ring)"}, S);
+  mk("circle", {r: R0 + LIMIT * TO_MPH * K, fill: "none", stroke: "var(--soft)", "stroke-dasharray": "3 5", opacity: .8}, S);
+  const maxN = Math.max(...STATS.hours.map(h => h.n)), span = DIAL.span();
+  DIAL.marks().forEach(({h, f, major}) => {
+    const a = ang(f), c = Math.cos(a), s = Math.sin(a);
+    mk("line", {x1: c * (R0 - 3), y1: s * (R0 - 3), x2: c * (R0 - (major ? 14 : 6)), y2: s * (R0 - (major ? 14 : 6)), stroke: "var(--soft)"}, S);
+    if (major) { const t = mk("text", {x: c * (RMAX + 30), y: s * (RMAX + 30) + 4, "text-anchor": "middle", "font-size": 11, fill: "var(--soft)"}, S); t.textContent = h === 0 ? "midnight" : hourLabel(h); }
+    const n = STATS.hours[h].n;
+    if (n) {
+      const a0 = ang(f + .002 * BUCKETS / span), a1 = ang(Math.min(1, (h + 1) * PER_HOUR / span) - .002 * BUCKETS / span), r = RMAX + 12;
+      mk("path", {d: `M${Math.cos(a0) * r},${Math.sin(a0) * r} A${r},${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${Math.cos(a1) * r},${Math.sin(a1) * r}`, fill: "none", stroke: "var(--soft)", "stroke-width": 1 + 9 * n / maxN, opacity: .5}, S);
+    }
+  });
+}
+drawStatic();
+// the vehicles
+const L = $("lines"), T = $("tips"), G = $("glowtips"), PU = $("pulses");
+const V = P.map((p, i) => {
+  const f = (p.q + rnd(i + 1)) / DIAL.span(), a = ang(f), r = R0 + p.mph * TO_MPH * K, c = heat(p.mph);
+  const line = mk("line", {class: "v", x1: Math.cos(a) * R0, y1: Math.sin(a) * R0, x2: Math.cos(a) * R0, y2: Math.sin(a) * R0, stroke: c, "stroke-width": 1.6, opacity: 0}, L);
+  const tip = mk("circle", {cx: Math.cos(a) * r, cy: Math.sin(a) * r, r: over(p) ? 2.3 : 1.5, fill: c, opacity: 0}, T);
+  const gt = over(p) ? mk("circle", {cx: Math.cos(a) * r, cy: Math.sin(a) * r, r: 4, fill: c, opacity: 0}, G) : null;
+  line.dataset.i = i;
+  return {p, f, a, r, c, line, tip, gt, born: -1, phase: rnd(i + 99) * Math.PI * 2, base: p.rough ? .45 : .85};
+});
+// the hand, with a fading trail
+const HG = $("handg"), trail = [];
+for (let k = 6; k >= 0; k--) trail.push(mk("line", {x1: 0, y1: 0, x2: 0, y2: -RMAX, stroke: "var(--hand)", "stroke-width": k ? 1 : 1.4, opacity: k ? .05 * (7 - k) / 7 : .7}, HG));
+
+function setLine(v, g) {
+  const r = R0 + (v.r - R0) * g, x = Math.cos(v.a), y = Math.sin(v.a);
+  v.line.setAttribute("x2", x * r); v.line.setAttribute("y2", y * r);
+  v.tip.setAttribute("opacity", g >= 1 ? 1 : 0);
+}
+function pulse(v) {
+  const c = mk("circle", {class: "pulse", cx: Math.cos(v.a) * v.r, cy: Math.sin(v.a) * v.r, r: 3, fill: "none", stroke: v.c, "stroke-width": 1.5}, PU);
+  c.animate([{transform: "scale(1)", opacity: .9}, {transform: "scale(6)", opacity: 0}], {duration: 1100, easing: "cubic-bezier(.2,.7,.3,1)"}).onfinish = () => c.remove();
+}
+function beat() { $("heart").animate([{transform: "scale(1.18)"}, {transform: "scale(1)"}], {duration: 380, easing: "ease-out"}); }
+const fmt = f => quarterLabel(Math.min(95, Math.floor(f * DIAL.span())));
+function readout(f) {
+  const seen = V.filter(v => v.born >= 0), o = seen.filter(v => over(v.p)).length;
+  $("clock").textContent = fmt(f);
+  $("count").textContent = `${seen.length} SO FAR · ${o} OVER`;
+}
+
+// the sweep: 24 hours in ~24 s
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const DAY_MS = 24000;
+let mode = "sweep", t0 = 0, sweepF = 0, focus = null;
+let endF = END_Q / DIAL.span();
+function start() {
+  V.forEach(v => { v.born = -1; setLine(v, 0); v.line.setAttribute("opacity", 0); if (v.gt) v.gt.setAttribute("opacity", 0); });
+  mode = "sweep"; t0 = performance.now(); $("scrub").value = 0;
+}
+function frame(now) {
+  if (mode === "sweep") {
+    sweepF = Math.min(endF, (now - t0) / DAY_MS);
+    V.forEach(v => {
+      if (v.born < 0 && v.f <= sweepF) { v.born = now; v.line.setAttribute("opacity", v.base); beat(); }
+    });
+    $("scrub").value = Math.round(sweepF * DIAL.span());
+    readout(sweepF);
+    if (sweepF >= endF) mode = "idle";
+  }
+  const a = ang(sweepF);
+  trail.forEach((l, k) => { const b = a - (trail.length - 1 - k) * .022; l.setAttribute("x2", Math.cos(b) * RMAX); l.setAttribute("y2", Math.sin(b) * RMAX); });
+  V.forEach(v => {
+    if (v.born < 0) return;
+    const age = now - v.born, g = Math.min(1, age / 650), e = 1 - Math.pow(1 - g, 3);
+    if (age < 700) setLine(v, e);
+    else if (!v.done) { setLine(v, 1); v.done = true; if (over(v.p)) pulse(v); }
+    if (v.gt) v.gt.setAttribute("opacity", (.35 + .3 * Math.sin(now / 900 + v.phase)) * (v.done ? 1 : 0));
+    if (mode === "idle" && !focus) v.line.setAttribute("opacity", v.base * (.78 + .22 * Math.sin(now / 1300 + v.phase)));
+  });
+  requestAnimationFrame(frame);
+}
+// breathing: in idle, now and then a car replays itself
+setInterval(() => {
+  if (mode !== "idle" || focus || document.hidden) return;
+  const v = V[Math.floor(Math.random() * V.length)];
+  v.born = performance.now(); v.done = false; beat();
+  $("clock").textContent = quarterLabel(v.p.q); $("count").textContent = `${v.p.mph} ${UNIT.toUpperCase()}${over(v.p) ? " · OVER" : ""}`;
+}, 1500);
+
+// focus a line: hover or tap
+function setFocus(i) {
+  if (focus) focus.line.classList.remove("hi");
+  focus = i == null ? null : V[i];
+  $("dial").classList.toggle("focus", !!focus);
+  if (focus) { focus.line.classList.add("hi"); focus.line.setAttribute("opacity", 1); $("clock").textContent = quarterLabel(focus.p.q); $("count").textContent = `${focus.p.mph} ${UNIT.toUpperCase()}${over(focus.p) ? " · OVER" : ""}${focus.p.dir < 0 ? " · WRONG WAY" : ""}`; pulse(focus); }
+  else readout(sweepF);
+}
+L.addEventListener("pointerover", e => { if (e.target.dataset.i) setFocus(+e.target.dataset.i); });
+L.addEventListener("pointerout", () => setFocus(null));
+$("dial").addEventListener("click", e => { if (!e.target.dataset.i) setFocus(null); });
+// scrub
+$("scrub").addEventListener("input", e => {
+  mode = "scrub"; sweepF = +e.target.value / DIAL.span();
+  V.forEach(v => { const on = v.f <= sweepF; v.born = on ? 0 : -1; v.done = on; setLine(v, on ? 1 : 0); v.line.setAttribute("opacity", on ? v.base : 0); });
+  readout(sweepF);
+});
+$("scrub").addEventListener("change", () => { mode = "idle"; });
+$("play").onclick = start;
+
+function relayout() {
+  drawStatic(); endF = END_Q / DIAL.span();
+  V.forEach((v, i) => {
+    v.f = (v.p.q + rnd(i + 1)) / DIAL.span(); v.a = ang(v.f);
+    const c = Math.cos(v.a), s = Math.sin(v.a);
+    v.line.setAttribute("x1", c * R0); v.line.setAttribute("y1", s * R0);
+    v.tip.setAttribute("cx", c * v.r); v.tip.setAttribute("cy", s * v.r);
+    if (v.gt) { v.gt.setAttribute("cx", c * v.r); v.gt.setAttribute("cy", s * v.r); }
+  });
+  $("scrub").max = DIAL.span();
+}
+dialToggle($("toggle"), () => { relayout(); if (!still) start(); else { V.forEach(v => setLine(v, 1)); } });
+$("scrub").max = DIAL.span();
+$("ramp").style.background = `linear-gradient(90deg, ${[5, 12, 20, 28, 35, 40].map(v => heat(v / TO_MPH)).join(",")})`;
+$("lbl").textContent = `${DAY_NAME} · ${P.length} lines`;
+$("plaque").innerHTML = `<div><b>${STATS.n}</b><span class="label">vehicles</span></div><div><b>${STATS.pctOver}%</b><span class="label">past the ring</span></div><div><b>${STATS.fastest ? STATS.fastest.mph : "–"}</b><span class="label">longest line, ${UNIT}</span></div>`;
+if (still) { mode = "idle"; sweepF = endF; V.forEach(v => { v.born = 0; v.done = true; setLine(v, 1); v.line.setAttribute("opacity", v.base); }); readout(endF); }
+else start();
+requestAnimationFrame(frame);
+</script></body></html>

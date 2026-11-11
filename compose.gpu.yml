@@ -1,0 +1,15 @@
+# The Intel GPU (OpenVINO's GPU plugin) for the detector:
+#   RENDER_GID=$(getent group render | cut -d: -f3) \
+#     docker compose -f compose.yml -f compose.gpu.yml up -d --build
+services:
+  app:
+    build:
+      args:
+        INTEL_GPU: "1"
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      # The host's render group, which may read /dev/dri/renderD128.
+      - "${RENDER_GID:?set RENDER_GID: getent group render | cut -d: -f3}"
+    environment:
+      - YOLO_DEVICE=intel:gpu

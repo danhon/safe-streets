@@ -1,0 +1,71 @@
+# safe-streets: one app, reading a folder of recorded segments.
+#
+#   cp .env.example .env    # fill in SPEED_LIMIT and TZ at least
+#   docker compose up -d --build
+#   docker compose logs app | grep setup    # the one-time operator link
+#
+# The public page is http://HOST:8080/, the operator's /operator.
+# With an Intel GPU: docker compose -f compose.yml -f compose.gpu.yml up -d
+# Behind a reverse proxy: examples/compose.traefik.yml.
+# No NVR? The recorder below copies an RTSP stream into FOOTAGE_DIR:
+#   COMPOSE_PROFILES=recorder in .env (and RTSP_URL). Read
+#   examples/ffmpeg-segments.md first: RTSP can run at a lower frame rate.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        - GIT_SHA
+        - DETECTOR_URL
+    image: safe-streets
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - SOURCE_DIR=/footage
+      - DATA_DIR=/data
+    ports: ["8080:8080"]
+    volumes:
+      # The database, clips, shots and the operator's secret key.
+      - data:/data
+      # The recordings: only ever read.
+      - ${FOOTAGE_DIR:-./footage}:/footage:ro
+    restart: unless-stopped
+    mem_limit: 1536m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # A minimal NVR, not a live path: the camera's RTSP stream copied (never
+  # re-encoded) into minute-long segments named by their start time, in TZ,
+  # and deleted after RECORDER_KEEP_HOURS. Opt-in: COMPOSE_PROFILES=recorder.
+  recorder:
+    profiles: [recorder]
+    build: recorder
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - RTSP_URL=${RTSP_URL:-}
+      - RECORDER_KEEP_HOURS=${RECORDER_KEEP_HOURS:-48}
+    command: ["sh", "/record.sh"]
+    volumes:
+      - ${FOOTAGE_DIR:-./footage}:/footage
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  data:

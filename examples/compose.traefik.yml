@@ -1,0 +1,29 @@
+# Behind Traefik (v2/v3) with Let's Encrypt, instead of publishing 8080:
+#   docker compose -f compose.yml -f examples/compose.traefik.yml up -d
+# Set SERVICE_HOST (e.g. traffic.example.org) and BASE_URL=https://$SERVICE_HOST
+# in .env, and name your Traefik network and cert resolver below.
+#
+# One router for the whole app: the public page is public by design, and
+# /operator has its own password. Don't put an auth middleware that sends a
+# signed-in user's name in front of / and expect / to read it: the public
+# page never reads who's signed in.
+services:
+  app:
+    ports: !reset []
+    environment:
+      # Only Traefik reaches the app (no published port), so believe its
+      # X-Forwarded-For and -Proto: the app then sees each visitor's address
+      # and https, and refuses sign-in over plain HTTP from the internet.
+      - FORWARDED_ALLOW_IPS=*
+    networks: [traefik]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.safe-streets.rule=Host(`${SERVICE_HOST}`)"
+      - "traefik.http.routers.safe-streets.entrypoints=websecure"
+      - "traefik.http.routers.safe-streets.tls.certresolver=le"
+      - "traefik.http.services.safe-streets.loadbalancer.server.port=8080"
+
+networks:
+  traefik:
+    external: true
+    name: traefik_default

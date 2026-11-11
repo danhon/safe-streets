@@ -1,0 +1,15 @@
+{% extends "operator/base.html" %}{% block title %}Passes{% endblock %}{% block main %}
+<h1>Passes on {{ day.strftime("%A, %B ") ~ day.day }}</h1>
+<p><a href="/operator/?day={{ prev }}">‹ the day before</a>{% if next %} · <a href="/operator/?day={{ next }}">the day after ›</a>{% endif %}</p>
+<div class="card soft">Calibration: {{ health.calibration }}{% if health.source %} · Source: {{ health.source }}{% endif %}{% if health.batch %} · Last batch {{ health.batch.age_s }} s ago{% endif %}</div>
+{% if items %}
+<div class="scroll"><table>
+<thead><tr><th>Time</th><th class="num">Speed ({{ unit }})</th><th class="num">±</th><th>Estimate</th><th>Type</th><th>Way</th><th>Picture</th><th>Clip</th><th>Flags</th></tr></thead>
+<tbody>{% for p in items %}<tr{% if p.hidden %} class="soft"{% endif %}>
+<td>{{ p.time }}</td><td class="num">{{ p.speed if p.speed is not none else "–" }}</td><td class="num">{{ p.pm if p.pm is not none else "" }}</td>
+<td>{{ p.confidence }}</td><td>{{ p.cls }}</td><td>{{ p.direction }}</td>
+<td>{% if p.shot %}<a href="/operator/shot/{{ p.id }}.jpg"><img src="/operator/shot/{{ p.id }}.jpg" alt="Pass {{ p.id }}" width="120" loading="lazy"></a>{% endif %}</td>
+<td>{% if p.clip %}<a href="/operator/clip/{{ p.id }}.mp4">clip</a>{% endif %}</td><td class="soft">{{ p.flags }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p>No passes this day.</p>{% endif %}
+{% endblock %}

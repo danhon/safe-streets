@@ -1,0 +1,5 @@
+{% extends "operator/base.html" %}{% block title %}Settings{% endblock %}{% block main %}
+<h1>Settings</h1>
+<p class="soft">Read only: change them in .env and restart. Passwords and secrets show only whether they're set.</p>
+<div class="scroll"><table><tbody>{% for r in rows %}<tr><td><code>{{ r.name }}</code></td><td>{{ r.value }}</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

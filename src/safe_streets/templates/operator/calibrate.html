@@ -1,0 +1,129 @@
+{% extends "operator/base.html" %}{% block title %}Calibration{% endblock %}
+{% block head %}<style>
+canvas { width: 100%; height: auto; border: 1px solid var(--line); cursor: crosshair; display: block; }
+.tools { display: flex; flex-wrap: wrap; gap: .4rem .6rem; align-items: center; margin: .6rem 0; }
+.hint { max-width: 75ch; }
+#msg, #dmsg, #pmsg { font-weight: 600; }
+details { margin-top: 1.5rem; }
+input.speed { width: 5.5em; }
+</style>{% endblock %}
+{% block main %}
+<h1>Calibration</h1>
+<p class="soft">Status: {{ cal_status or "none yet: nothing is analysed until the road is drawn" }}{% if median_length %} · median length of the last {{ n_lengths }} cars: <b>{{ median_length }} m</b> (a typical car is about 4.5 m){% endif %}</p>
+
+<h2>1. The scene</h2>
+<p class="hint">Draw on the snapshot, then <b>Save the scene</b>. <b>Road</b>: the corners of the road surface you can see clearly (where motion is watched).
+<b>Lane</b>: the part of the road whose cars count, if not all of it (say, the near lane). <b>Mask</b>: areas whose motion to ignore (a flag, a tree in the wind); each <b>New mask</b> starts another.
+<b>Night lane</b>: two clicks along the line between the lanes, for cars seen only by their lights. <b>Occluder</b>: click a post or tree trunk that hides cars for a moment.
+Saved before any drive-bys, the scene is a <i>draft</i>: passes are tracked and kept but get no speed until step 2.</p>
+<div class="tools">
+  <button data-mode="road" class="on">Road</button><button data-mode="lane">Lane</button><button data-mode="mask">Mask</button>
+  <button id="newMask">New mask</button><button data-mode="night">Night lane</button><button data-mode="occ">Occluder</button>
+  <button id="undo">Undo</button><button id="clear">Clear this</button><button id="saveScene" class="primary">Save the scene</button>
+  <span id="msg"></span>
+</div>
+{% if snapshot %}<canvas id="c" width="1920" height="1080"></canvas>
+{% else %}<p class="bad">No snapshot: the source hasn't recorded anything yet, or can't be reached.</p>{% endif %}
+
+<h2>2. Drive-bys at known speeds</h2>
+<p class="hint">Drive past at a steady speed you know (cruise control, or a passenger reading a GPS app) two or more times, both ways if you can.
+Tick each drive's pass below and type its true speed in {{ unit }}. The scale is fitted from them; each drive's reading at that scale shows how well they agree.</p>
+<div class="scroll"><table id="drives"><thead><tr><th></th><th>When</th><th class="num">Reading ({{ unit }})</th><th>Way</th><th class="num">Frames</th><th>Picture</th><th>True speed ({{ unit }})</th></tr></thead><tbody>
+{% for d in drives %}<tr data-id="{{ d.id }}"><td><input type="checkbox"></td><td>{{ d.time }}</td><td class="num">{{ d.speed if d.speed is not none else "–" }}</td><td>{{ d.direction }}</td><td class="num">{{ d.n }}</td>
+<td>{% if d.shot %}<a href="/operator/shot/{{ d.id }}.jpg" target="_blank">picture</a>{% endif %}</td><td><input class="speed" type="number" step="0.1" min="1"></td></tr>
+{% else %}<tr><td colspan="7" class="soft">No tracked passes yet. Save the scene, drive past, and reload after the next batch.</td></tr>{% endfor %}
+</tbody></table></div>
+<p><button id="saveDrives" class="primary">Calibrate from the ticked drives</button> <span id="dmsg"></span></p>
+
+<details><summary>Experimental: measured ground points (untested)</summary>
+<p class="hint">Click spots on the ground whose positions you've measured and type them in metres (X along the road, Y across). Four or more, spread out.
+This method has never been tested on a real install: check its speeds against a drive-by before trusting it.</p>
+<div class="tools"><button data-mode="point">Add point</button><button id="savePoints">Save the points</button><span id="pmsg"></span></div>
+<table id="pts"><thead><tr><th>#</th><th>x px</th><th>y px</th><th>X m</th><th>Y m</th><th></th></tr></thead><tbody></tbody></table>
+</details>
+
+<script>
+const SNAP = {{ snapshot|tojson }}, CSRF = {{ s.csrf|tojson }};
+const S = {{ scene|safe }};
+const W = 1920, Hh = 1080;
+let mode = "road", road = [], lane = [], masks = [[]], night = [], occ = [], points = [];
+if (S) {
+  const k = [W / S.size[0], Hh / S.size[1]], sc = ps => (ps || []).map(p => [p[0] * k[0], p[1] * k[1]]);
+  road = sc(S.road); lane = S.lane ? sc(S.lane) : []; masks = S.mask.length ? S.mask.map(sc) : [[]];
+  night = S.night_lane ? [[0, S.night_lane[0] * k[1]], [W, S.night_lane[1] * k[1]]] : []; occ = S.occluders.map(x => x * k[0]);
+}
+const $ = id => document.getElementById(id), c = $("c"), ctx = c && c.getContext("2d"), img = new Image();
+if (c) { img.onload = draw; img.src = "/operator/calibrate/img/" + SNAP; }
+function poly(ps, colour, fill) {
+  if (!ps.length) return; ctx.strokeStyle = colour; ctx.lineWidth = 3; ctx.beginPath();
+  ps.forEach((p, i) => i ? ctx.lineTo(...p) : ctx.moveTo(...p)); ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.stroke();
+  ps.forEach(p => { ctx.fillStyle = colour; ctx.fillRect(p[0] - 4, p[1] - 4, 8, 8); });
+}
+function draw() {
+  if (!ctx) return;
+  ctx.drawImage(img, 0, 0, W, Hh);
+  poly(road, "#ffea00"); poly(lane, "#00e0ff", "rgba(0,224,255,.12)");
+  masks.forEach(m => poly(m, "#ff3b30", "rgba(255,59,48,.25)"));
+  if (night.length) { ctx.strokeStyle = "#bf5af2"; ctx.lineWidth = 3; ctx.setLineDash([12, 8]); ctx.beginPath();
+    ctx.moveTo(...night[0]); ctx.lineTo(...(night[1] || night[0])); ctx.stroke(); ctx.setLineDash([]); }
+  occ.forEach(x => { ctx.strokeStyle = "#ff9f0a"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, Hh); ctx.stroke(); });
+  points.forEach((p, i) => { ctx.fillStyle = "#ff2d55"; ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 22px system-ui"; ctx.fillText(i + 1, p.x + 9, p.y - 9); });
+  table();
+}
+function table() {
+  const tb = document.querySelector("#pts tbody"); tb.innerHTML = "";
+  points.forEach((p, i) => { const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i + 1}</td><td>${p.x.toFixed(0)}</td><td>${p.y.toFixed(0)}</td>` +
+      `<td><input type=number step=0.01 value="${p.X}"></td><td><input type=number step=0.01 value="${p.Y}"></td><td><button>delete</button></td>`;
+    const [ix, iy] = tr.querySelectorAll("input"); ix.onchange = () => p.X = +ix.value; iy.onchange = () => p.Y = +iy.value;
+    tr.querySelector("button").onclick = () => { points.splice(i, 1); draw(); }; tb.appendChild(tr); });
+}
+function current() { return {road, lane, mask: masks[masks.length - 1], night, point: points}[mode]; }
+if (c) c.addEventListener("click", ev => {
+  const r = c.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width, y = (ev.clientY - r.top) * Hh / r.height;
+  if (mode === "occ") occ.push(x);
+  else if (mode === "night") { if (night.length >= 2) night = []; night.push([x, y]); }
+  else if (mode === "point") { const X = prompt("X (metres along the road)?"); if (X === null) return;
+    const Y = prompt("Y (metres across the road)?"); if (Y === null) return; points.push({x, y, X: +X, Y: +Y}); }
+  else current().push([x, y]);
+  draw();
+});
+document.querySelectorAll("button[data-mode]").forEach(b => b.onclick = () => {
+  mode = b.dataset.mode; document.querySelectorAll("button[data-mode]").forEach(x => x.classList.toggle("on", x === b)); });
+$("newMask").onclick = () => { if (masks[masks.length - 1].length) masks.push([]); mode = "mask";
+  document.querySelectorAll("button[data-mode]").forEach(x => x.classList.toggle("on", x.dataset.mode === "mask")); };
+$("undo").onclick = () => { if (mode === "occ") occ.pop(); else (current() || []).pop(); draw(); };
+$("clear").onclick = () => { if (mode === "road") road = []; else if (mode === "lane") lane = []; else if (mode === "mask") masks = [[]];
+  else if (mode === "night") night = []; else if (mode === "occ") occ = []; else if (mode === "point") points = []; draw(); };
+function nightLine() {  // y at x=0 and x=W, through the two clicks
+  if (night.length < 2 || night[0][0] === night[1][0]) return null;
+  const [a, b] = night, m = (b[1] - a[1]) / (b[0] - a[0]); return [a[1] - m * a[0], a[1] + m * (W - a[0])];
+}
+async function post(url, body, out) {
+  const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)});
+  const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {}
+  if (!r.ok) { const h = /<h1>(.*?)<\/h1>/s.exec(t); out.style.color = "var(--bad)";
+    out.textContent = (j && (typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail))) || (h && h[1]) || `Error ${r.status}`; return null; }
+  out.style.color = "var(--good)"; return j;
+}
+$("saveScene").onclick = async () => {
+  const j = await post("/operator/calibrate/scene", {snapshot: SNAP, road, lane: lane.length >= 3 ? lane : null,
+    mask: masks.filter(m => m.length >= 3), night_lane: nightLine(), occluders: occ}, $("msg"));
+  if (j) $("msg").textContent = `Saved (calibration ${j.id}, ${j.status}).`;
+};
+$("saveDrives").onclick = async () => {
+  const drives = [...document.querySelectorAll("#drives tbody tr[data-id]")].filter(tr => tr.querySelector("input[type=checkbox]").checked)
+    .map(tr => ({id: +tr.dataset.id, speed: +tr.querySelector("input.speed").value}));
+  if (drives.length < 2) { $("dmsg").style.color = "var(--bad)"; $("dmsg").textContent = "Tick two drives or more."; return; }
+  if (drives.some(d => !(d.speed > 0))) { $("dmsg").style.color = "var(--bad)"; $("dmsg").textContent = "Type each ticked drive's true speed."; return; }
+  const j = await post("/operator/calibrate/drives", {drives}, $("dmsg"));
+  if (j) $("dmsg").textContent = `Saved (calibration ${j.id}): the drives read ${j.readings.join(", ")} ${j.unit} at this scale, within ${j.spread} ${j.unit} of their true speeds.`;
+};
+$("savePoints").onclick = async () => {
+  const j = await post("/operator/calibrate/points", {snapshot: SNAP, points}, $("pmsg"));
+  if (j) $("pmsg").textContent = `Saved (calibration ${j.id}), re-projection error ${j.reproj_err_m.toFixed(2)} m.`;
+};
+</script>
+{% endblock %}
