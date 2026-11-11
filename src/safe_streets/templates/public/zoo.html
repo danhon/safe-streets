@@ -359,7 +359,7 @@ function launch(t) {
 function step(t) {
   const dt = Math.min(50, t - last); last = t;
   const W = lane.clientWidth;
-  if (t >= nextAt) launch(t);
+  if (P.length && t >= nextAt) launch(t);  // an empty day has no parade
   walkers = walkers.filter(w => {
     w.x += w.v * dt;
     w.el.style.transform = `translateX(${w.x}px)`;

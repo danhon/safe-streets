@@ -140,7 +140,7 @@ function frame(now) {
 }
 // breathing: in idle, now and then a car replays itself
 setInterval(() => {
-  if (mode !== "idle" || focus || document.hidden) return;
+  if (mode !== "idle" || focus || document.hidden || !V.length) return;
   const v = V[Math.floor(Math.random() * V.length)];
   v.born = performance.now(); v.done = false; beat();
   $("clock").textContent = quarterLabel(v.p.q); $("count").textContent = `${v.p.mph} ${UNIT.toUpperCase()}${over(v.p) ? " · OVER" : ""}`;

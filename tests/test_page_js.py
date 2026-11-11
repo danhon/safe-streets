@@ -26,7 +26,8 @@ const el = id => els[id] || (els[id] = {id, innerHTML: "", textContent: "", styl
   getBoundingClientRect() { return {width: 800, height: 600, left: 0, top: 0}; },
   cloneNode() { return el("_clone" + Math.random()); }, removeAttribute() {}, remove() {}, append() {},
   offsetWidth: 800, offsetHeight: 600, scrollWidth: 800, clientWidth: 800,
-  get parentNode() { return el("_parent"); }, children: [], removeChild() {}, insertBefore() {}});
+  get parentNode() { return el("_parent"); }, children: [], removeChild() {}, insertBefore() {},
+  animate() { return {finished: Promise.resolve(), cancel() {}}; }});
 globalThis.document = {getElementById: el, querySelector: () => el("_q"), querySelectorAll: () => [],
   createElement: () => el("_new" + Math.random()), createElementNS: () => el("_ns" + Math.random()), head: el("head"), body: el("body"),
   addEventListener() {}, documentElement: el("html")};
@@ -34,12 +35,19 @@ globalThis.window = globalThis;
 globalThis.addEventListener = () => {};
 globalThis.location = {search: ""};
 globalThis.localStorage = {getItem: () => null, setItem() {}};
-globalThis.requestAnimationFrame = () => 0;
+// Timers and frames queue up and run after the scripts, a few rounds, at a
+// clock that moves on (the page's animations and its idle replays).
+let clock = 0, queue = [];
+globalThis.performance = {now: () => clock};
+globalThis.requestAnimationFrame = f => queue.push(f);
 globalThis.matchMedia = () => ({matches: false, addEventListener() {}});
 globalThis.ResizeObserver = class { observe() {} };
-globalThis.setTimeout = () => 0; globalThis.setInterval = () => 0;
+globalThis.setTimeout = f => queue.push(f); globalThis.clearTimeout = () => {};
+globalThis.setInterval = f => (intervals.push(f), 0); globalThis.clearInterval = () => {};
+const intervals = [];
 """
-REPORT = "\nconsole.log(JSON.stringify(Object.fromEntries(Object.entries(els).map(([k, v]) => [k, v.innerHTML || v.textContent]))));"
+REPORT = "\nfor (let r = 0; r < 20; r++) { clock += 1600; const q = queue; queue = []; q.forEach(f => f(clock)); intervals.forEach(f => f()); }" + \
+    "\nconsole.log(JSON.stringify(Object.fromEntries(Object.entries(els).map(([k, v]) => [k, v.innerHTML || v.textContent]))));"
 
 
 def run_page(html: str, tmp_path) -> dict:
@@ -62,7 +70,7 @@ async def four_cars(db):
                           cls="car", direction=1, mph=24.0, plus_minus=1.0)
 
 
-@pytest.mark.parametrize("page", ["zoo", "dial"])
+@pytest.mark.parametrize("page", ["zoo", "dial", ""])
 @pytest.mark.parametrize("cars", [0, 4])
 async def test_a_day_with_nothing_listed_draws_without_errors(db, settings, tmp_path, page, cars):
     if cars:
@@ -76,7 +84,7 @@ async def test_a_day_with_nothing_listed_draws_without_errors(db, settings, tmp_
         assert (f"{cars} " if cars else "No ") in out["quip"]
 
 
-@pytest.mark.parametrize("page", ["zoo", "dial"])
+@pytest.mark.parametrize("page", ["zoo", "dial", ""])
 async def test_a_full_day_still_draws(seeded, settings, tmp_path, page):
     async with client(app_for(settings, seeded)) as c:
         r = await c.get(f"/{page}?day={DAY}")
