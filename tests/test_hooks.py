@@ -23,7 +23,7 @@ from safe_streets.detector import Detections
 from safe_streets.geometry import Calibration
 from safe_streets.hooks import PassRecord, load_hooks
 from safe_streets.pipeline import process_event
-from safe_streets.synth import render_clip, uneven_times
+from safe_streets.synth import render_clip, scene_for, uneven_times
 from safe_streets.vision import Vision
 from listing import first_page
 from test_synth_pipeline import MPH20, T0, SynthProtect
@@ -162,13 +162,22 @@ class ColourDetector:
         return Detections(np.array(boxes, np.float32), np.full(len(boxes), 0.9, np.float32), np.full(len(boxes), 2))
 
 
-async def test_a_detector_giving_the_true_box_gives_the_true_speed(db, settings, tmp_path):
+@pytest.mark.parametrize("size,bframes", [((1920, 1080), False), ((1920, 1080), True), ((1280, 720), False),
+                                          ((3840, 2160), True)], ids=["1080p", "1080p-bframes", "720p", "4k-bframes"])
+async def test_a_detector_giving_the_true_box_gives_the_true_speed(db, settings, tmp_path, size, bframes):
+    """The day path end to end (decode, crop, detector, tracker, fit) on the
+    clips cameras send: B-frames (decode order isn't display order) and
+    frames that aren't 1080p (scaled to the calibration's 1080p pixels)."""
     clip = tmp_path / "src.mp4"
-    sc = render_clip(clip, speed_mps=MPH20, frame_times=uneven_times(84, 12, 0.3, seed=2))
+    sc = render_clip(clip, speed_mps=MPH20, frame_times=uneven_times(84, 12, 0.3, seed=2), size=size,
+                     bframes=bframes)
+    # The calibration page draws any camera's snapshot at 1920x1080, so a
+    # calibration is always in 1080p pixels, whatever the clip's size.
+    cal = scene_for((1920, 1080), MPH20, sc.direction, sc.t0)
     vision = Vision(tmp_path / "models", "cpu", 0.35, cache_dir=None, detector=ColourDetector())
     await db.upsert_event("w1", T0.isoformat(), (T0 + timedelta(seconds=10)).isoformat())
     r = await process_event(await db.get_event("w1"), source=SynthProtect(clip), vision=vision,
-                            cal=Calibration(1, [], [], sc.H, sc.road, "", "active"), settings=settings, db=db)
+                            cal=Calibration(1, [], [], cal.H, cal.road, "", "active"), settings=settings, db=db)
     rows, n = await first_page(db)
     assert r["status"] == "done" and n == 1
     assert rows[0]["mph"] == pytest.approx(20.0, abs=0.5)
