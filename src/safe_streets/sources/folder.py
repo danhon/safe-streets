@@ -123,7 +123,7 @@ class FolderSource:
         if self.dir is None or not self.dir.is_dir():
             return []
         settled = self.clock() - self.s.source_settle_s
-        out = []
+        out, seen = [], set()
         for p in self.dir.iterdir():
             st = p.stat() if p.is_file() else None
             if st is None or st.st_mtime > settled:
@@ -132,11 +132,15 @@ class FolderSource:
             if start is None:
                 continue
             key = (p.name, st.st_size, st.st_mtime)
+            seen.add(key)
             if key not in self._cache:
                 self._cache[key] = _probe(p, self.s.export_timeout_seconds)
             probed = self._cache[key]
             if probed is not None:
                 out.append(Segment(p, start, *probed))
+        # Forget segments the recorder deleted or rewrote since the last look.
+        for key in self._cache.keys() - seen:
+            del self._cache[key]
         return sorted(out, key=lambda s: s.start)
 
     async def recorded_until(self) -> datetime | None:

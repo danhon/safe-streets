@@ -175,3 +175,16 @@ def test_the_hour_the_clocks_go_back_names_two_segments_apart(folder):
     a, b = FolderSource(s).segments()
     assert b.start - a.start == timedelta(hours=1)
     assert a.start == first.astimezone(ZoneInfo("UTC"))
+
+
+def test_what_it_remembers_of_deleted_segments_is_forgotten(folder):
+    """The recorder deletes old segments (RECORDER_KEEP_HOURS); what was
+    probed of them goes too, or a long run's memory only grows (M5)."""
+    d, s = folder
+    two_segments(d)
+    src = FolderSource(s)
+    assert len(src.segments()) == 2 and len(src._cache) == 2
+    oldest = min(d.iterdir())
+    oldest.unlink()
+    assert len(src.segments()) == 1
+    assert len(src._cache) == 1 and oldest.name not in {k[0] for k in src._cache}
