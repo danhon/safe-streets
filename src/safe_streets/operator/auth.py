@@ -7,7 +7,9 @@
   made in the data volume on first start), HttpOnly, SameSite=Strict,
   Path=/operator, 30 days, carrying the session epoch and a CSRF token.
   `reset-password` bumps the epoch, so every earlier session ends.
-- Five wrong passwords in a row lock sign-in for 15 minutes.
+- Five wrong passwords in a row lock sign-in for 15 minutes, counted one
+  check at a time (guesses sent together each count). argon2 runs in a
+  worker thread, off the event loop.
 - Every POST carries a CSRF token: the session's, or before sign-in a
   short-lived signed one.
 - No sign-in over plain HTTP unless the client is loopback or private.
@@ -17,6 +19,7 @@ AUTH_MODE=none serves the dashboard to loopback clients only.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import ipaddress
@@ -25,6 +28,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from weakref import WeakKeyDictionary
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -39,6 +43,9 @@ SETUP_TTL = timedelta(hours=24)
 FORM_TTL_S = 3600
 
 _ph = PasswordHasher()
+# One check at a time per database: each reads the count of wrong passwords
+# and writes it back, so guesses sent together must not all read the same one.
+_checking: WeakKeyDictionary = WeakKeyDictionary()
 
 
 @dataclass(frozen=True)
@@ -92,7 +99,7 @@ async def setup_token_ok(db, token: str, now: datetime) -> bool:
 async def set_password(db, password: str) -> None:
     if len(password) < MIN_PASSWORD:
         raise ValueError(f"the password needs {MIN_PASSWORD} characters or more")
-    await db.update_operator(password_hash=_ph.hash(password), setup_token_hash=None, setup_expires=None,
+    await db.update_operator(password_hash=await asyncio.to_thread(_ph.hash, password), setup_token_hash=None, setup_expires=None,
                              failed=0, locked_until=None)
 
 
@@ -107,13 +114,19 @@ async def reset_password(db, now: datetime) -> str:
 
 async def check_password(db, password: str, now: datetime) -> str:
     """"ok", "wrong" or "locked"."""
+    lock = _checking.setdefault(db, asyncio.Lock())
+    async with lock:
+        return await _check_password(db, password, now)
+
+
+async def _check_password(db, password: str, now: datetime) -> str:
     op = await db.get_operator()
     if not op or not op["password_hash"]:
         return "wrong"
     if op["locked_until"] and now < datetime.fromisoformat(op["locked_until"]):
         return "locked"
     try:
-        _ph.verify(op["password_hash"], password)
+        await asyncio.to_thread(_ph.verify, op["password_hash"], password)
     except (VerificationError, InvalidHashError):
         failed = (op["failed"] or 0) + 1
         await db.update_operator(failed=0 if failed >= MAX_FAILED else failed,

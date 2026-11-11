@@ -220,3 +220,33 @@ def test_forwarded_headers_are_trusted_only_from_the_named_proxies(settings, mon
     assert Settings().forwarded_allow_ips == "198.51.100.7"
     monkeypatch.delenv("FORWARDED_ALLOW_IPS")
     assert Settings().forwarded_allow_ips == "127.0.0.1"
+
+
+async def test_wrong_guesses_at_once_still_lock_sign_in(db, clock):
+    """Guesses that arrive together each count: the count isn't read by all
+    of them before any writes it back."""
+    import asyncio
+    await auth.set_password(db, PASSWORD)
+    got = await asyncio.gather(*(auth.check_password(db, "not the password", clock()) for _ in range(auth.MAX_FAILED)))
+    assert got == ["wrong"] * auth.MAX_FAILED
+    assert await auth.check_password(db, PASSWORD, clock()) == "locked"
+
+
+async def test_the_password_is_checked_off_the_event_loop(db, clock, monkeypatch):
+    """argon2 takes tens of milliseconds of CPU a check; on the event loop
+    every other request waits for it."""
+    import threading
+    threads = []
+    real = auth._ph
+
+    class Watched:
+        def hash(self, p):
+            return real.hash(p)
+
+        def verify(self, h, p):
+            threads.append(threading.current_thread())
+            return real.verify(h, p)
+    monkeypatch.setattr(auth, "_ph", Watched())
+    await auth.set_password(db, PASSWORD)
+    assert await auth.check_password(db, PASSWORD, clock()) == "ok"
+    assert threads and threads[0] is not threading.main_thread()
