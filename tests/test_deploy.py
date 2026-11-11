@@ -163,3 +163,14 @@ def test_the_recorder_names_segments_as_the_app_reads_them():
     script = (ROOT / "recorder" / "record.sh").read_text()
     m = re.search(r'"\$OUT/([^"]+)"', script)
     assert m and m[1] == Settings().source_pattern and "%z" in m[1]
+
+
+def test_the_recorder_gives_up_on_a_silent_camera():
+    """ffmpeg waits forever on a stream that stops sending; -timeout (5.x:
+    socket I/O, microseconds) makes it exit, and compose restarts it."""
+    script = (ROOT / "recorder" / "record.sh").read_text()
+    cmd = script[script.index("exec ffmpeg"):]
+    assert re.search(r'-timeout "\$\(\(\s*TIMEOUT_S \* 1000000\s*\)\)"', cmd)
+    assert cmd.index("-timeout") < cmd.index("-i ")
+    assert 'TIMEOUT_S="${RECORDER_TIMEOUT_S:-10}"' in script
+    assert _load("compose.yml")["services"]["recorder"]["restart"] == "unless-stopped"

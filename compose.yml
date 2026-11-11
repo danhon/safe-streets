@@ -57,6 +57,7 @@ services:
     environment:
       - RTSP_URL=${RTSP_URL:-}
       - RECORDER_KEEP_HOURS=${RECORDER_KEEP_HOURS:-48}
+      - RECORDER_TIMEOUT_S=${RECORDER_TIMEOUT_S:-10}
     command: ["sh", "/record.sh"]
     volumes:
       - ${FOOTAGE_DIR:-./footage}:/footage

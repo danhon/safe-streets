@@ -8,11 +8,13 @@
 # -c copy: the camera's own frames and timestamps, never re-encoded.
 # -reset_timestamps 0: each segment's pts carry on from the last, so the
 #   app joins segments on their pts, not only on their names.
-# If the stream drops, ffmpeg exits and compose restarts the container; the
-# segment it was writing is left unfinished and the app skips it.
+# If the stream drops, or sends nothing for RECORDER_TIMEOUT_S (10), ffmpeg
+# exits and compose restarts the container; the segment it was writing is
+# left unfinished and the app skips it.
 set -eu
 : "${RTSP_URL:?set RTSP_URL in .env}"
 KEEP_HOURS="${RECORDER_KEEP_HOURS:-48}"
+TIMEOUT_S="${RECORDER_TIMEOUT_S:-10}"
 OUT=/footage
 
 (
@@ -23,7 +25,7 @@ OUT=/footage
 ) &
 
 exec ffmpeg -hide_banner -loglevel warning \
-  -rtsp_transport tcp -i "$RTSP_URL" \
+  -rtsp_transport tcp -timeout "$(( TIMEOUT_S * 1000000 ))" -i "$RTSP_URL" \
   -map 0:v:0 -c copy \
   -f segment -segment_time 60 -segment_format mp4 -reset_timestamps 0 -strftime 1 \
   "$OUT/%Y%m%d-%H%M%S%z.mp4"
