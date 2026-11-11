@@ -154,3 +154,12 @@ def test_every_yaml_file_parses():
 def test_ci_installs_ffmpeg():
     """The folder source's tests need ffmpeg; GitHub's runner hasn't got it."""
     assert "install -y -q ffmpeg" in (ROOT / ".github" / "workflows" / "test.yml").read_text()
+
+
+def test_the_recorder_names_segments_as_the_app_reads_them():
+    """Same pattern both sides, with the UTC offset (%z): local names alone
+    repeat in the hour the clocks go back."""
+    from safe_streets.config import Settings
+    script = (ROOT / "recorder" / "record.sh").read_text()
+    m = re.search(r'"\$OUT/([^"]+)"', script)
+    assert m and m[1] == Settings().source_pattern and "%z" in m[1]

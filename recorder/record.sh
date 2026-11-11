@@ -1,6 +1,8 @@
 #!/bin/sh
 # Copy RTSP_URL's video into /footage as segments of 60 s named by their
-# start time in TZ (safe-streets' default SOURCE_PATTERN, %Y%m%d-%H%M%S.mp4),
+# start time in TZ with its UTC offset (safe-streets' default SOURCE_PATTERN,
+# %Y%m%d-%H%M%S%z.mp4: without the offset the hour the clocks go back
+# would reuse, and overwrite, the hour before's names),
 # and delete segments older than RECORDER_KEEP_HOURS (48).
 #
 # -c copy: the camera's own frames and timestamps, never re-encoded.
@@ -24,4 +26,4 @@ exec ffmpeg -hide_banner -loglevel warning \
   -rtsp_transport tcp -i "$RTSP_URL" \
   -map 0:v:0 -c copy \
   -f segment -segment_time 60 -segment_format mp4 -reset_timestamps 0 -strftime 1 \
-  "$OUT/%Y%m%d-%H%M%S.mp4"
+  "$OUT/%Y%m%d-%H%M%S%z.mp4"

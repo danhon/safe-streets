@@ -230,7 +230,8 @@ def read_pts(path: Path) -> list[float]:
 def demo(out: Path, now=None) -> Path:
     """A folder the app can run on: one 20 s segment, started 5 minutes
     before `now`, with a car crossing at 20 mph drawn so a real detector sees
-    it, named by its start in TZ (UTC if unset) as SOURCE_PATTERN's default,
+    it, named by its start in TZ (UTC if unset) with its offset, as
+    SOURCE_PATTERN's default,
     and scene.json: the homography (H, image px to road metres) and the road
     outline to calibrate with."""
     import json
@@ -241,7 +242,8 @@ def demo(out: Path, now=None) -> Path:
     now = now or datetime.now(timezone.utc)
     start = (now - timedelta(minutes=5)).astimezone(ZoneInfo(os.environ.get("TZ") or "UTC"))
     out.mkdir(parents=True, exist_ok=True)
-    seg = out / start.strftime("%Y%m%d-%H%M%S.mp4")
+    from safe_streets.config import DEFAULT_SOURCE_PATTERN
+    seg = out / start.strftime(DEFAULT_SOURCE_PATTERN)
     sc = render_clip(seg, speed_mps=8.9408, frame_times=uneven_times(300, 15, 0.3, seed=1), photo=True)
     (out / "scene.json").write_text(json.dumps({"H": sc.H.tolist(), "road": [list(p) for p in sc.road],
                                                 "truth_mph": sc.truth_mps / 0.44704}))

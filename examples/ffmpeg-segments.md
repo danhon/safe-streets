@@ -56,7 +56,7 @@ TZ=Europe/London ffmpeg -hide_banner -loglevel warning \
   -rtsp_transport tcp -i "$RTSP_URL" \
   -map 0:v:0 -c copy \
   -f segment -segment_time 60 -segment_format mp4 -reset_timestamps 0 -strftime 1 \
-  "footage/%Y%m%d-%H%M%S.mp4"
+  "footage/%Y%m%d-%H%M%S%z.mp4"
 ```
 
 - `-c copy` keeps the camera's own frames and timestamps. Never re-encode
@@ -64,10 +64,12 @@ TZ=Europe/London ffmpeg -hide_banner -loglevel warning \
   real time with an even grid, and the speeds go wrong.
 - `-reset_timestamps 0` carries each segment's timestamps on from the last,
   so the app joins segments on them, not only on their names.
-- The names are each segment's start in local time, safe-streets' default
-  `SOURCE_PATTERN` (`%Y%m%d-%H%M%S.mp4`, read in `TZ`). Name them any other
-  way and set `SOURCE_PATTERN` to match; a `%z` in it makes the names carry
-  their own offset.
+- The names are each segment's start in local time with its UTC offset
+  (`20261101-013000-0700.mp4`), safe-streets' default `SOURCE_PATTERN`
+  (`%Y%m%d-%H%M%S%z.mp4`). Keep the `%z`: without it, the hour the clocks
+  go back gets the same names as the hour before, overwriting it. Name
+  them any other way and set `SOURCE_PATTERN` to match (a pattern without
+  `%z` is read in `TZ`).
 - A segment still being written (modified within `SOURCE_SETTLE_S`, 10 s)
   is left alone, and one that ffmpeg never finished (the stream dropped)
   is skipped.

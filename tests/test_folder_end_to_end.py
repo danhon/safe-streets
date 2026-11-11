@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from safe_streets.config import DEFAULT_SOURCE_PATTERN
 from safe_streets.batcher import Batcher
 from safe_streets.sources.folder import FolderSource
 from safe_streets.speed import Sample
@@ -78,7 +79,7 @@ async def test_three_segments_one_batch_one_pass(tmp_path, settings, db):
     whole = tmp_path / "whole.mp4"
     scene = render_clip(whole, speed_mps=MPH20, frame_times=times, gop=1)
     for path, first in _segments(whole, tmp_path / "cut", [1012, 1024], times):
-        dest = d / (T + timedelta(seconds=first - times[0])).strftime("%Y%m%d-%H%M%S.mp4")
+        dest = d / (T + timedelta(seconds=first - times[0])).strftime(DEFAULT_SOURCE_PATTERN)
         path.rename(dest)
         old = time.time() - 600
         os.utime(dest, (old, old))
@@ -128,7 +129,7 @@ async def test_a_car_still_crossing_at_the_recordings_end_waits(tmp_path, settin
     whole = tmp_path / "whole.mp4"
     scene = render_clip(whole, speed_mps=MPH20, frame_times=times, gop=1)
     for path, first in _segments(whole, tmp_path / "cut", [1009, 1018], times)[:2]:
-        dest = d / (T + timedelta(seconds=first - times[0])).strftime("%Y%m%d-%H%M%S.mp4")
+        dest = d / (T + timedelta(seconds=first - times[0])).strftime(DEFAULT_SOURCE_PATTERN)
         path.rename(dest)
         old = time.time() - 600
         os.utime(dest, (old, old))

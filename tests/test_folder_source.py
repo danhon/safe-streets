@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 import pytest
 
+from safe_streets.config import DEFAULT_SOURCE_PATTERN
 from safe_streets.sources import NoFootage, make_source
 from safe_streets.sources.folder import FolderSource
 from safe_streets.synth import read_pts, render_clip, uneven_times
@@ -28,9 +29,9 @@ def folder(tmp_path, settings):
 
 
 def segment(d, start: datetime, times, *, continuing=True, age_s=60.0, **kw):
-    """A segment named by its local start time. continuing: its pts carry on
+    """A segment named by its local start time and offset (the default). continuing: its pts carry on
     from the recording's clock (ffmpeg's -reset_timestamps 0), else from 0."""
-    path = d / start.strftime("%Y%m%d-%H%M%S.mp4")
+    path = d / start.strftime(DEFAULT_SOURCE_PATTERN)
     render_clip(path, speed_mps=8.94, frame_times=times, **kw)
     old = time.time() - age_s
     os.utime(path, (old, old))
@@ -156,3 +157,21 @@ async def test_a_hung_ffmpeg_times_out(folder, tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="timed out"):
         await src.export(T + timedelta(seconds=2), T + timedelta(seconds=9), tmp_path / "clip.mp4")
     assert time.monotonic() - t0 < 10
+
+
+def test_the_hour_the_clocks_go_back_names_two_segments_apart(folder):
+    """At the autumn change 01:30 happens twice. The default names carry the
+    offset, so the second hour neither overwrites the first nor reads as it."""
+    d, s = folder
+    first = datetime(2026, 11, 1, 1, 30, tzinfo=TZ)            # PDT, -0700
+    second = datetime(2026, 11, 1, 1, 30, fold=1, tzinfo=TZ)   # PST, -0800, an hour later
+    paths = []
+    for start in (first, second):
+        path = d / start.strftime(s.source_pattern)
+        assert not path.exists(), "the second hour's name is the first's"
+        render_clip(path, speed_mps=8.94, frame_times=uneven_times(20, 10, 0.3, seed=1))
+        os.utime(path, (time.time() - 60,) * 2)
+        paths.append(path)
+    a, b = FolderSource(s).segments()
+    assert b.start - a.start == timedelta(hours=1)
+    assert a.start == first.astimezone(ZoneInfo("UTC"))

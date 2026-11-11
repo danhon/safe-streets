@@ -31,6 +31,11 @@ def _ov_cache_dir() -> Path | None:
     return Path(v) if v.strip() else None
 
 
+# Segment names: the start in local time with its UTC offset. Without the
+# offset, the hour the clocks go back repeats its names (the bundled recorder
+# would overwrite the first hour, and nothing could tell the two apart).
+DEFAULT_SOURCE_PATTERN = "%Y%m%d-%H%M%S%z.mp4"
+
 @dataclass(frozen=True)
 class Settings:
     # Where footage comes from (sources/): folder | protect.
@@ -39,7 +44,7 @@ class Settings:
     # pattern; local time in TZ unless it has %z), ignored until unmodified
     # for SOURCE_SETTLE_S (still being written).
     source_dir: Path | None = field(default_factory=lambda: Path(os.environ["SOURCE_DIR"]) if os.environ.get("SOURCE_DIR") else None)
-    source_pattern: str = field(default_factory=lambda: _env("SOURCE_PATTERN", "%Y%m%d-%H%M%S.mp4"))
+    source_pattern: str = field(default_factory=lambda: _env("SOURCE_PATTERN", DEFAULT_SOURCE_PATTERN))
     source_settle_s: float = field(default_factory=lambda: _env("SOURCE_SETTLE_S", 10.0))
 
     protect_host: str = field(default_factory=lambda: _env("PROTECT_HOST", ""))

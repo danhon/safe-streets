@@ -8,6 +8,7 @@ import pytest
 
 
 from safe_streets.speed import Sample, fit_speed  # noqa: E402
+from safe_streets.config import Settings  # noqa: E402
 from safe_streets.synth import read_pts, render_clip, uneven_times  # noqa: E402
 
 MPH20 = 8.9408  # m/s
@@ -91,10 +92,10 @@ def test_demo_writes_a_recent_segment_the_folder_source_reads(tmp_path, monkeypa
     now = datetime(2026, 11, 10, 18, 0, tzinfo=timezone.utc)
     demo(tmp_path, now=now)
     segs = list(tmp_path.glob("*.mp4"))
-    assert [p.name for p in segs] == ["20261110-175500.mp4"]  # 5 min ago, London time (UTC in November)
+    assert [p.name for p in segs] == ["20261110-175500+0000.mp4"]  # 5 min ago, London time (UTC in November)
     scene = json.loads((tmp_path / "scene.json").read_text())
     assert len(scene["H"]) == 3 and len(scene["road"]) == 4 and scene["truth_mph"] == pytest.approx(20.0)
-    s = SimpleNamespace(source_dir=tmp_path, source_pattern="%Y%m%d-%H%M%S.mp4", tz="Europe/London", source_settle_s=0,
+    s = SimpleNamespace(source_dir=tmp_path, source_pattern=Settings().source_pattern, tz="Europe/London", source_settle_s=0,
                         export_timeout_seconds=120.0)
     seg, = FolderSource(s, clock=lambda: now.timestamp() + 3600).segments()
     assert seg.start == now - timedelta(minutes=5) and seg.end - seg.start > timedelta(seconds=15)
