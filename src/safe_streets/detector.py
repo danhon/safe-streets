@@ -33,7 +33,8 @@ MEAN = np.array([103.53, 116.28, 123.675], np.float32)
 STD = np.array([57.375, 57.12, 58.395], np.float32)
 SIZE, PAD, IOU, MAX_DET = 640, 114, 0.65, 300
 # The default model's folder under MODELS_DIR, and its files' sha256
-# (scripts/export_rtmdet.py writes them; checked on load).
+# (scripts/export_rtmdet.py writes them; checked on load, which refuses any
+# other files).
 RTMDET_DIR = "rtmdet-tiny"
 RTMDET_SHA256 = {
     "model.xml": "4df141df993a78941c88af58fd1408dc5c35cb86dbe42f160dc6070445157d50",
@@ -140,7 +141,8 @@ class RTMDet:
             for name, want in RTMDET_SHA256.items():
                 got = _sha256(folder / name)
                 if got != want:
-                    log.warning("detector %s's sha256 is %s, not the pinned %s", name, got, want)
+                    raise ValueError(f"detector {folder / name}'s sha256 is {got}, not the pinned {want}: "
+                                     "rebuild the image, or run scripts/fetch_detector.py")
         dev = "GPU" if device.lower().endswith("gpu") else "CPU"
         self.compiled = ov.Core().compile_model(str(xml), dev)
         self.req = self.compiled.create_infer_request()
