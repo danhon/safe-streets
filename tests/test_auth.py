@@ -250,3 +250,35 @@ async def test_the_password_is_checked_off_the_event_loop(db, clock, monkeypatch
     await auth.set_password(db, PASSWORD)
     assert await auth.check_password(db, PASSWORD, clock()) == "ok"
     assert threads and threads[0] is not threading.main_thread()
+
+
+ROUTE = """Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT
+eth0\t00000000\t0100A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0
+eth0\t0000A8C0\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0
+"""
+
+
+def test_the_default_gateway_is_read_from_the_routing_table(tmp_path):
+    (tmp_path / "route").write_text(ROUTE)
+    assert auth.default_gateway(tmp_path / "route") == "192.168.0.1"  # prepublish: allow
+    (tmp_path / "none").write_text(ROUTE.splitlines()[0] + "\n")
+    assert auth.default_gateway(tmp_path / "none") is None
+    assert auth.default_gateway(tmp_path / "missing") is None
+
+
+async def test_plain_http_sign_in_from_the_gateway_warns_once(settings, db, clock, monkeypatch, caplog):
+    """Docker Desktop, rootless Docker and Podman show every visitor as the
+    container's gateway, so the app can't tell a neighbour from the internet
+    (M9): it still allows the sign-in, and says so in the log, once."""
+    import logging
+    gw = "192.168.65.1"  # prepublish: allow
+    monkeypatch.setattr(auth, "default_gateway", lambda *a: gw)
+    app = app_for(settings, db, clock)
+    with caplog.at_level(logging.WARNING):
+        async with client(app, peer=(gw, 50000), https=False) as c:
+            assert (await c.get("/operator/login")).status_code == 200
+            assert (await c.get("/operator/login")).status_code == 200
+        async with client(app, peer=LAN, https=False) as c:
+            assert (await c.get("/operator/login")).status_code == 200
+    warned = [r.getMessage() for r in caplog.records if "gateway" in r.getMessage()]
+    assert len(warned) == 1 and gw in warned[0] and "HTTPS" in warned[0]

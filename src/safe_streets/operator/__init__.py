@@ -64,6 +64,8 @@ def create_operator_app(settings, db, batcher, source, vision, *, now: Callable[
     signer = Signer(auth.load_secret(settings.data_dir))
     none_csrf = secrets.token_urlsafe(24)  # AUTH_MODE=none: the process's token
     app.state.signer = signer
+    gateway = auth.default_gateway()
+    warned_gateway = []
 
     @app.exception_handler(NeedSignIn)
     async def need_sign_in(_request, _exc):
@@ -105,7 +107,15 @@ def create_operator_app(settings, db, batcher, source, vision, *, now: Callable[
         return session
 
     def plain_http_refused(request: Request) -> HTMLResponse | None:
-        if request.url.scheme == "https" or auth.peer_is_local(request.client.host if request.client else None):
+        peer = request.client.host if request.client else None
+        if request.url.scheme == "https":
+            return None
+        if auth.peer_is_local(peer):
+            if gateway and peer == gateway and not warned_gateway:
+                warned_gateway.append(peer)
+                log.warning("plain-HTTP sign-in from %s, the gateway: this Docker setup hides visitors' addresses "
+                            "(Docker Desktop, rootless Docker, Podman), so everyone looks local. Never expose this "
+                            "port to the internet without HTTPS in front (see .env.example).", peer)
             return None
         return _plain(403, "Sign in over HTTPS: signing in over plain HTTP is refused from outside this network.")
 

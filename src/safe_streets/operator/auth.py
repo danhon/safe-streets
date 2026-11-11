@@ -13,6 +13,10 @@
 - Every POST carries a CSRF token: the session's, or before sign-in a
   short-lived signed one.
 - No sign-in over plain HTTP unless the client is loopback or private.
+  Docker Desktop, rootless Docker and Podman show every visitor as the
+  container's gateway (a private address), and so does Linux Docker for a
+  visitor on 127.0.0.1 or over some VPNs: there the rule can't tell a
+  neighbour from the internet. The app allows it and warns once (M9).
 
 AUTH_MODE=none serves the dashboard to loopback clients only.
 """
@@ -184,6 +188,23 @@ def peer_is_local(host: str | None) -> bool:
     if ip.version == 6 and ip.ipv4_mapped:
         ip = ip.ipv4_mapped
     return ip.is_loopback or any(ip in n for n in PRIVATE)
+
+
+def default_gateway(route: Path | str = "/proc/net/route") -> str | None:
+    """This machine's (in Docker, the container's) default gateway, from
+    Linux's routing table; None where it can't be read."""
+    try:
+        lines = Path(route).read_text().splitlines()[1:]
+    except OSError:
+        return None
+    for line in lines:
+        f = line.split()
+        if len(f) > 2 and f[1] == "00000000" and f[2] != "00000000":
+            try:
+                return str(ipaddress.IPv4Address(int(f[2], 16).to_bytes(4, "little")))
+            except ValueError:
+                return None
+    return None
 
 
 def peer_is_loopback(host: str | None) -> bool:

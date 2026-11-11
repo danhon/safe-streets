@@ -94,6 +94,10 @@ The reasons behind these choices, with their evidence, are in
   or colours reach a public page. Nothing reads number plates.
 - Footage stays on your machine; the models run locally; nothing calls a
   cloud service. Clips are deleted after `CLIP_RETENTION_DAYS` (30).
+- The operator's password only crosses the network over HTTPS, or plain HTTP
+  from a local address. Docker Desktop, rootless Docker and Podman make
+  every visitor look local, so put HTTPS in front before you open the port
+  to the internet (`.env.example` says more).
 - Mind the law where you live on recording a public street, and on
   publishing what you record.
 
